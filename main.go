@@ -200,7 +200,7 @@ var algorithm string
 func main() {
 	var serverList string
 	var port int
-	flag.StringVar(&serverList, "backends", "", "Load balanced backends, use commas to separate")
+	flag.StringVar(&serverList, "servers", "", "Load balanced backends, use commas to separate")
 	flag.IntVar(&port, "port", 3030, "Port to serve")
 	flag.StringVar(&algorithm, "algorithm", "", "Load balancing Algorithm")
 	flag.Parse()
