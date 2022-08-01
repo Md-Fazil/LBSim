@@ -213,7 +213,7 @@ func main() {
 	}
 
 	// start health checking
-	go HealthCheck()
+	go healthCheck()
 
 	log.Printf("Load Balancer started at :%d\n", port)
 	if err := server.ListenAndServe(); err != nil {
