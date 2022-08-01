@@ -1,10 +1,13 @@
 package main
 
 import (
+	"log"
+	"net"
 	"net/http/httputil"
 	"net/url"
 	"sync"
 	"sync/atomic"
+	"time"
 )
 
 type Server struct {
@@ -69,4 +72,29 @@ func (s *ServerPool) GetNextServer() *Server {
 		}
 	}
 	return nil
+}
+
+// isServerAlive checks whether a server is Alive by establishing a TCP connection
+func isServerAlive(u *url.URL) bool {
+	timeout := 2 * time.Second
+	conn, err := net.DialTimeout("tcp", u.Host, timeout)
+	if err != nil {
+		log.Println("Site unreachable, error: ", err)
+		return false
+	}
+	defer conn.Close()
+	return true
+}
+
+// HealthCheck pings the server and updates the statuses
+func (s *ServerPool) HealthCheck() {
+	for _, b := range s.servers {
+		status := "up"
+		alive := isServerAlive(b.URL)
+		b.SetAlive(alive)
+		if !alive {
+			status = "down"
+		}
+		log.Printf("%s [%s]\n", b.URL, status)
+	}
 }
