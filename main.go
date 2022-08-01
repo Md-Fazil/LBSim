@@ -237,7 +237,7 @@ func main() {
 			attempts := GetAttemptsFromContext(request)
 			log.Printf("%s(%s) Attempting retry %d\n", request.RemoteAddr, request.URL.Path, attempts)
 			ctx := context.WithValue(request.Context(), Attempts, attempts+1)
-			lb(writer, request.WithContext(ctx), algorithm)
+			lb(writer, request.WithContext(ctx))
 		}
 
 		serverPool.AddServer(&Server{
