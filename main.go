@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"net/http/httputil"
 	"net/url"
+	"sort"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -16,7 +17,9 @@ import (
 )
 
 const (
-	Attempts int = iota
+	RoundRobin      string = "RoundRobin"
+	LeastConnection string = "LeastConnection"
+	Attempts        int    = iota
 	Retry
 )
 
@@ -25,6 +28,7 @@ type Server struct {
 	Alive        bool
 	mux          sync.RWMutex
 	ReverseProxy *httputil.ReverseProxy
+	connections  int
 }
 
 // SetAlive for this backend
@@ -40,6 +44,18 @@ func (b *Server) IsAlive() (alive bool) {
 	alive = b.Alive
 	b.mux.RUnlock()
 	return
+}
+
+func (b *Server) addConnection() {
+	b.mux.Lock()
+	b.connections++
+	b.mux.Unlock()
+}
+
+func (b *Server) removeConnection() {
+	b.mux.Lock()
+	b.connections--
+	b.mux.Unlock()
 }
 
 // ServerPool holds information about reachable servers
@@ -68,8 +84,8 @@ func (s *ServerPool) MarkServerStatus(backendUrl *url.URL, alive bool) {
 	}
 }
 
-// GetNextServer returns next active server to take a connection in round robin fashion
-func (s *ServerPool) GetNextServer() *Server {
+// GetNextServerRoundRobin returns next active server to take a connection in round robin fashion
+func (s *ServerPool) GetNextServerRoundRobin() *Server {
 	next := s.NextIndex()
 	l := len(s.servers) + next
 	for i := next; i < l; i++ {
@@ -78,6 +94,19 @@ func (s *ServerPool) GetNextServer() *Server {
 			if i != next {
 				atomic.StoreUint64(&s.current, uint64(idx))
 			}
+			return s.servers[idx]
+		}
+	}
+	return nil
+}
+
+// GetNextServerLeastConnection returns next active server with least active connection
+func (s *ServerPool) GetNextServerLeastConnection() *Server {
+	sort.Slice(s.servers, func(i, j int) bool {
+		return s.servers[i].connections < s.servers[j].connections
+	})
+	for idx, server := range s.servers {
+		if server.IsAlive() {
 			return s.servers[idx]
 		}
 	}
@@ -146,21 +175,34 @@ func lb(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	peer := serverPool.GetNextServer()
+	var peer *Server
+
+	switch algorithm {
+	case LeastConnection:
+		peer = serverPool.GetNextServerLeastConnection()
+	default:
+		peer = serverPool.GetNextServerRoundRobin()
+	}
+
+	peer.addConnection()
 	if peer != nil {
 		peer.ReverseProxy.ServeHTTP(w, r)
+		peer.removeConnection()
 		return
 	}
+	peer.removeConnection()
 	http.Error(w, "Service not available", http.StatusServiceUnavailable)
 }
 
 var serverPool ServerPool
+var algorithm string
 
 func main() {
 	var serverList string
 	var port int
 	flag.StringVar(&serverList, "backends", "", "Load balanced backends, use commas to separate")
 	flag.IntVar(&port, "port", 3030, "Port to serve")
+	flag.StringVar(&algorithm, "algorithm", "", "Load balancing Algorithm")
 	flag.Parse()
 
 	if len(serverList) == 0 {
@@ -195,7 +237,7 @@ func main() {
 			attempts := GetAttemptsFromContext(request)
 			log.Printf("%s(%s) Attempting retry %d\n", request.RemoteAddr, request.URL.Path, attempts)
 			ctx := context.WithValue(request.Context(), Attempts, attempts+1)
-			lb(writer, request.WithContext(ctx))
+			lb(writer, request.WithContext(ctx), algorithm)
 		}
 
 		serverPool.AddServer(&Server{
