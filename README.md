@@ -2,7 +2,7 @@
 
 ## Description
 
-This project is a load balancer simulator and was developed to understand the internal workings of load balancers and the various load balancing algorithms.
+This project is a load balancer simulator that was developed to understand the internal workings of load balancers and the various load balancing algorithms.
 The program reverse proxies HTTP requests to healthy servers chosen based on the specified algorithm 
 and conducts health checks of servers in the server pool at regular intervals.
 
