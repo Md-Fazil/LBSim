@@ -1,4 +1,4 @@
-# SimpleLoadBalancer
+# LBSim - Load Balancer Simulator
 
 ## Description
 
